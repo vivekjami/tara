@@ -1,0 +1,7 @@
+/target
+data/
+*.rrd
+*.parquet
+.env
+.idea
+/.idea
