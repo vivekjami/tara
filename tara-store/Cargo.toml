@@ -1,0 +1,10 @@
+[package]
+name = "tara-store"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+arrow = "59.0.0"
+h3o = "0.10.0"
+thiserror.workspace = true
