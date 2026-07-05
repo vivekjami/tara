@@ -1,5 +1,5 @@
 use crate::dedup::DedupFilter;
-use crate::parse::{parse_row, rows_to_record_batch, AisRow};
+use crate::parse::{AisRow, parse_row, rows_to_record_batch};
 use anyhow::Result;
 use std::path::Path;
 use tracing::info;
@@ -13,13 +13,14 @@ const BATCH_SIZE: usize = 100_000;
 
 pub async fn ingest_file(input: &Path, output_dir: &Path) -> Result<()> {
     let mut rdr = csv::ReaderBuilder::new()
-        .has_headers(false)       // we handle the header manually
-        .flexible(true)           // some rows have trailing commas
+        .has_headers(false) // we handle the header manually
+        .flexible(true) // some rows have trailing commas
         .from_path(input)?;
 
     // Read and clean the header line (the CSV has a leading '# ')
     let mut records = rdr.records();
-    let raw_header = records.next()
+    let raw_header = records
+        .next()
         .ok_or_else(|| anyhow::anyhow!("Empty file"))??;
     let headers = {
         let mut h = csv::StringRecord::new();

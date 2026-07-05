@@ -19,8 +19,8 @@ pub fn vessel_position_schema() -> Arc<Schema> {
         Field::new("latitude", DataType::Float64, false),
         Field::new("longitude", DataType::Float64, false),
         // Kinematics — nullable: Class B vessels often omit these
-        Field::new("sog", DataType::Float32, true),   // speed over ground, knots
-        Field::new("cog", DataType::Float32, true),   // course over ground, degrees
+        Field::new("sog", DataType::Float32, true), // speed over ground, knots
+        Field::new("cog", DataType::Float32, true), // course over ground, degrees
         Field::new("heading", DataType::UInt16, true), // true heading, 0-359; 511=unavailable
         // Classification — nullable: not all message types carry these
         Field::new("mobile_type", DataType::Utf8, false), // "Class A", "Class B"

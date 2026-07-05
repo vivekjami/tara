@@ -17,24 +17,24 @@
 //! In both modes, output is written to `<output>/<YYYY-MM-DD>/chunk_NNNNNN.arrow`.
 //! Re-running directory mode skips days whose output directory already exists,
 //! making multi-day ingestion safely resumable.
-//! 
+//!
 //! This is for the individual ingest step and bulk data for data folder
 //! RUST_LOG=info cargo run --release --bin tara-ingest -- \
 //!    --input data/aisdk-2026-06-10/aisdk-2026-06-10.csv \
 //!    --output data/chunks
-//! 
+//!
 //! Next one :
 //! RUST_LOG=info cargo run --release --bin tara-ingest -- \
 //!    --input-dir data/ \
 //!    --output data/chunks
-//! 
-//! 
+//!
+//!
 
 mod dedup;
 mod parse;
 mod writer;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::path::{Path, PathBuf};
 use tracing::info;
 

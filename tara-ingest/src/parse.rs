@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use arrow::array::*;
 use arrow::record_batch::RecordBatch;
 use std::sync::Arc;
@@ -9,7 +9,7 @@ use tara_store::schema::vessel_position_schema;
 #[derive(Debug, Clone)]
 pub struct AisRow {
     pub mmsi: u32,
-    pub timestamp_us: i64,  // microseconds since Unix epoch, UTC
+    pub timestamp_us: i64, // microseconds since Unix epoch, UTC
     pub latitude: f64,
     pub longitude: f64,
     pub sog: Option<f32>,
@@ -52,7 +52,7 @@ pub fn parse_row(record: &csv::StringRecord, headers: &csv::StringRecord) -> Opt
     let lat: f64 = get("Latitude")?.parse().ok()?;
     let lon: f64 = get("Longitude")?.parse().ok()?;
     if lat.abs() > 90.0 {
-        return None;  // AIS "position unavailable" sentinel
+        return None; // AIS "position unavailable" sentinel
     }
 
     // Optional kinematics
@@ -60,7 +60,7 @@ pub fn parse_row(record: &csv::StringRecord, headers: &csv::StringRecord) -> Opt
     let cog: Option<f32> = get("COG").and_then(|s| s.parse().ok());
     let heading: Option<u16> = get("Heading")
         .and_then(|s| s.parse::<u16>().ok())
-        .filter(|&h| h <= 360);  // 511 = unavailable in AIS spec; treat as None
+        .filter(|&h| h <= 360); // 511 = unavailable in AIS spec; treat as None
 
     // Optional classification
     let nav_status = get("Navigational status")
@@ -96,28 +96,30 @@ fn parse_timestamp_us(s: &str) -> Option<i64> {
     // chrono would be cleaner but adds a dependency; do it manually
     // Format: "10/06/2026 00:00:00"
     let s = s.trim();
-    if s.len() != 19 { return None; }
+    if s.len() != 19 {
+        return None;
+    }
 
-    let day:   u32 = s[0..2].parse().ok()?;
+    let day: u32 = s[0..2].parse().ok()?;
     let month: u32 = s[3..5].parse().ok()?;
-    let year:  i32 = s[6..10].parse().ok()?;
-    let hour:  u32 = s[11..13].parse().ok()?;
-    let min:   u32 = s[14..16].parse().ok()?;
-    let sec:   u32 = s[17..19].parse().ok()?;
+    let year: i32 = s[6..10].parse().ok()?;
+    let hour: u32 = s[11..13].parse().ok()?;
+    let min: u32 = s[14..16].parse().ok()?;
+    let sec: u32 = s[17..19].parse().ok()?;
 
     // Days since Unix epoch (1970-01-01) using proleptic Gregorian calendar
     let days_since_epoch = days_from_civil(year, month, day)?;
-    let total_seconds = days_since_epoch * 86400
-        + (hour as i64) * 3600
-        + (min as i64) * 60
-        + (sec as i64);
+    let total_seconds =
+        days_since_epoch * 86400 + (hour as i64) * 3600 + (min as i64) * 60 + (sec as i64);
 
     Some(total_seconds * 1_000_000) // convert to microseconds
 }
 
 /// Days since 1970-01-01 for a given date. Standard civil calendar algorithm.
 fn days_from_civil(y: i32, m: u32, d: u32) -> Option<i64> {
-    if m < 1 || m > 12 || d < 1 || d > 31 { return None; }
+    if m < 1 || m > 12 || d < 1 || d > 31 {
+        return None;
+    }
     let y = if m <= 2 { y - 1 } else { y };
     let era: i64 = (if y >= 0 { y } else { y - 399 }) as i64 / 400;
     let yoe: i64 = y as i64 - era * 400;
@@ -137,9 +139,8 @@ pub fn rows_to_record_batch(rows: &[AisRow]) -> Result<RecordBatch> {
 
     // Build each column as an Arrow array
     let mmsi_arr = UInt32Array::from_iter_values(rows.iter().map(|r| r.mmsi));
-    let ts_arr = TimestampMicrosecondArray::from_iter_values(
-        rows.iter().map(|r| r.timestamp_us)
-    ).with_timezone("UTC");
+    let ts_arr = TimestampMicrosecondArray::from_iter_values(rows.iter().map(|r| r.timestamp_us))
+        .with_timezone("UTC");
     let lat_arr = Float64Array::from_iter_values(rows.iter().map(|r| r.latitude));
     let lon_arr = Float64Array::from_iter_values(rows.iter().map(|r| r.longitude));
     let sog_arr = Float32Array::from_iter(rows.iter().map(|r| r.sog));
@@ -167,7 +168,6 @@ pub fn rows_to_record_batch(rows: &[AisRow]) -> Result<RecordBatch> {
         ],
     )?)
 }
-
 
 #[cfg(test)]
 mod tests {
