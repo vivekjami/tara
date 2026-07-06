@@ -42,7 +42,11 @@ use futures::stream;
 use tara_store::chunk::ChunkMeta;
 use tara_store::index::ChunkIndex;
 use tracing::info;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
+/// Test-only instrumentation: counts how many chunk files were actually opened.
+/// Reset with `CHUNKS_READ.store(0, Ordering::SeqCst)` before each test.
+pub static CHUNKS_READ: AtomicUsize = AtomicUsize::new(0);
 // ── Schema ────────────────────────────────────────────────────────────────────
 
 /// Vessel position schema using DataFusion's bundled Arrow types.
@@ -301,6 +305,7 @@ impl ExecutionPlan for TaraExecutionPlan {
 /// Open one Arrow IPC file, apply projection, return all batches.
 /// Returns empty Vec on any error — corrupt chunks are skipped silently.
 fn read_chunk(path: &std::path::Path, projection: Option<&[usize]>) -> anyhow::Result<Vec<RecordBatch>> {
+    CHUNKS_READ.fetch_add(1, Ordering::SeqCst);
     let reader = datafusion::arrow::ipc::reader::FileReader::try_new(
         File::open(path)?,
         projection.map(|p| p.to_vec()),

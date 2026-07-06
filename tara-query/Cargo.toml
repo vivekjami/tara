@@ -12,3 +12,5 @@ tara-store = { version = "0.1.0", path = "../tara-store" }
 tokio = { workspace = true, features = ["full"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
+tempfile = "3"
+serial_test = "3"
