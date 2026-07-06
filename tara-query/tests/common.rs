@@ -53,3 +53,52 @@ pub fn write_synthetic_chunk(dir: &std::path::Path, name: &str, mmsi: u32, start
         h3_cells: vec![],
     }
 }
+
+/// Like `write_synthetic_chunk`, but with an explicit (latitude, longitude)
+/// instead of the hardcoded Ushant-area position. Needed for density-query
+/// tests, which care about position, not just mmsi/timestamp.
+#[allow(clippy::too_many_arguments)]
+pub fn write_synthetic_chunk_at_position(
+    dir: &std::path::Path,
+    name: &str,
+    mmsi: u32,
+    start_us: i64,
+    lat: f64,
+    lon: f64,
+) -> ChunkMeta {
+    let schema = vessel_schema();
+    let path: PathBuf = dir.join(name);
+
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(UInt32Array::from(vec![mmsi])),
+            Arc::new(TimestampMicrosecondArray::from(vec![start_us]).with_timezone("UTC")),
+            Arc::new(Float64Array::from(vec![lat])),
+            Arc::new(Float64Array::from(vec![lon])),
+            Arc::new(Float32Array::from(vec![Some(12.3)])),
+            Arc::new(Float32Array::from(vec![Some(88.0)])),
+            Arc::new(UInt16Array::from(vec![Some(90)])),
+            Arc::new(StringArray::from(vec!["A"])),
+            Arc::new(StringArray::from(vec![Some("Under way")])),
+            Arc::new(StringArray::from(vec![Some("Cargo")])),
+            Arc::new(StringArray::from(vec![Some("TEST VESSEL")])),
+        ],
+    )
+    .expect("build synthetic RecordBatch");
+
+    let file = std::fs::File::create(&path).expect("create chunk file");
+    let mut writer = FileWriter::try_new(file, &schema).expect("create IPC writer");
+    writer.write(&batch).expect("write batch");
+    writer.finish().expect("finish IPC file");
+
+    ChunkMeta {
+        path,
+        date: "2026-06-10".into(),
+        time_min_us: start_us,
+        time_max_us: start_us + 1,
+        mmsi_count: 1,
+        row_count: 1,
+        h3_cells: vec![],
+    }
+}

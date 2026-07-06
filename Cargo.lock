@@ -2915,6 +2915,7 @@ dependencies = [
  "async-trait",
  "datafusion",
  "futures",
+ "h3o",
  "serial_test",
  "tara-store",
  "tempfile",

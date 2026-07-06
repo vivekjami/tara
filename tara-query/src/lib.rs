@@ -24,3 +24,4 @@
 pub mod context;
 pub mod provider;
 pub mod queries;
+pub mod h3_udf;
