@@ -5,5 +5,10 @@ edition = "2024"
 
 [dependencies]
 anyhow.workspace = true
-arrow = "59.0.0"
+async-trait = "0.1.89"
 datafusion = "54.0.0"
+futures = "0.3.32"
+tara-store = { version = "0.1.0", path = "../tara-store" }
+tokio = { workspace = true, features = ["full"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true

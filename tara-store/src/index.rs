@@ -13,6 +13,7 @@ use anyhow::Result;
 use std::path::Path;
 
 /// In-memory index over all ingested chunk files.
+#[derive(Debug, Clone)]
 pub struct ChunkIndex {
     chunks: Vec<ChunkMeta>,
 }
@@ -94,6 +95,12 @@ impl ChunkIndex {
             date_count: dates.len(),
         }
     }
+
+    /// Return references to all chunks — used when no filter can be pushed down.
+    pub fn all_chunks(&self) -> Vec<&ChunkMeta> {
+        self.chunks.iter().collect()
+    }
+
 }
 
 /// Summary statistics returned by [`ChunkIndex::stats`].

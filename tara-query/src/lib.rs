@@ -1,14 +1,25 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! # tara-query
+//!
+//! DataFusion integration for Tara.
+//!
+//! Exposes the chunk store as a SQL-queryable table named `vessel_positions`.
+//! The entry point is [`context::TaraContext`], which wraps a DataFusion
+//! `SessionContext` with the table pre-registered and ready to query.
+//!
+//! ## Usage
+//!
+//! ```rust,no_run
+//! use tara_query::context::TaraContext;
+//! use tara_store::index::ChunkIndex;
+//!
+//! #[tokio::main]
+//! async fn main() -> anyhow::Result<()> {
+//!     let index = ChunkIndex::load("data/chunks/tara.index".as_ref())?;
+//!     let ctx = TaraContext::new(index).await?;
+//!     let batches = ctx.query("SELECT COUNT(*) FROM vessel_positions").await?;
+//!     Ok(())
+//! }
+//! ```
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub mod context;
+pub mod provider;
