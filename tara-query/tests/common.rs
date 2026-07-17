@@ -1,9 +1,12 @@
+#![allow(dead_code)]
 //! Shared test helpers for tara-query integration tests.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use datafusion::arrow::array::{Float32Array, Float64Array, StringArray, TimestampMicrosecondArray, UInt16Array, UInt32Array};
+use datafusion::arrow::array::{
+    Float32Array, Float64Array, StringArray, TimestampMicrosecondArray, UInt16Array, UInt32Array,
+};
 use datafusion::arrow::ipc::writer::FileWriter;
 use datafusion::arrow::record_batch::RecordBatch;
 
@@ -16,7 +19,13 @@ use tara_store::chunk::ChunkMeta;
 /// Matches the real `ChunkMeta` in `tara-store::chunk` (no `Default` derive,
 /// so every field is filled explicitly). `h3_cells` is left empty since
 /// these tests only exercise time-range pushdown, not spatial pruning.
-pub fn write_synthetic_chunk(dir: &std::path::Path, name: &str, mmsi: u32, start_us: i64, end_us: i64) -> ChunkMeta {
+pub fn write_synthetic_chunk(
+    dir: &std::path::Path,
+    name: &str,
+    mmsi: u32,
+    start_us: i64,
+    end_us: i64,
+) -> ChunkMeta {
     let schema = vessel_schema();
     let path: PathBuf = dir.join(name);
 

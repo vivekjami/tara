@@ -19,7 +19,9 @@ use std::sync::Arc;
 use datafusion::arrow::array::{Array, ArrayRef, Float64Array, UInt64Array};
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::Result as DFResult;
-use datafusion::logical_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility};
+use datafusion::logical_expr::{
+    ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
+};
 use h3o::{LatLng, Resolution};
 
 #[derive(Debug, PartialEq, Eq, Hash)]

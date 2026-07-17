@@ -28,7 +28,11 @@ const POS_B: (f64, f64) = (48.4510, -5.0910); // ~150m from POS_A, same region
 const POS_C: (f64, f64) = (1.3000, 103.8000); // Singapore Strait — different cell, guaranteed
 
 fn expected_cell(lat: f64, lon: f64) -> u64 {
-    u64::from(LatLng::new(lat, lon).expect("valid coords").to_cell(Resolution::Five))
+    u64::from(
+        LatLng::new(lat, lon)
+            .expect("valid coords")
+            .to_cell(Resolution::Five),
+    )
 }
 
 #[tokio::test]
@@ -41,7 +45,6 @@ async fn density_query_matches_hand_designed_positions() {
     // common.rs), so for this test we write chunks directly rather than
     // through the shared helper, to control lat/lon per-row.
     let mut metas = Vec::new();
-    let mut chunk_n = 0;
 
     // 3 reports at/near POS_A (2 different vessels + 1 repeat of the first,
     // to exercise both report_count and COUNT(DISTINCT mmsi)):
@@ -55,10 +58,9 @@ async fn density_query_matches_hand_designed_positions() {
         (300u32, POS_C),
     ];
 
-    for (i, (mmsi, (lat, lon))) in rows.iter().enumerate() {
+    for (chunk_n, (mmsi, (lat, lon))) in rows.iter().enumerate() {
         let name = format!("chunk_{chunk_n}.arrow");
-        chunk_n += 1;
-        let ts = base + i as i64 * 60_000_000; // 1 min apart, doesn't matter for this test
+        let ts = base + chunk_n as i64 * 60_000_000; // 1 min apart, doesn't matter for this test
         metas.push(common::write_synthetic_chunk_at_position(
             dir.path(),
             &name,
@@ -73,7 +75,8 @@ async fn density_query_matches_hand_designed_positions() {
     let provider = Arc::new(VesselTableProvider::new(index));
 
     let ctx = SessionContext::new();
-    ctx.register_table("vessel_positions", provider).expect("register table");
+    ctx.register_table("vessel_positions", provider)
+        .expect("register table");
     ctx.register_udf(ScalarUDF::from(H3CellRes5::new()));
 
     let sql = density_query(base - 3_600_000_000, base + 3_600_000_000);
@@ -106,17 +109,30 @@ async fn density_query_matches_hand_designed_positions() {
         "sanity check on the test itself: POS_A/B and POS_C must be different cells"
     );
 
-    assert_eq!(results.len(), 2, "expected exactly 2 distinct H3 cells in the results");
+    assert_eq!(
+        results.len(),
+        2,
+        "expected exactly 2 distinct H3 cells in the results"
+    );
 
     let (ab_reports, ab_vessels) = results
         .get(&cell_ab)
         .unwrap_or_else(|| panic!("expected cell {cell_ab} (POS_A/POS_B area) in results"));
-    assert_eq!(*ab_reports, 3, "cell A/B should have 3 total reports (100@A, 100@B, 200@A)");
-    assert_eq!(*ab_vessels, 2, "cell A/B should have 2 distinct vessels (100 and 200)");
+    assert_eq!(
+        *ab_reports, 3,
+        "cell A/B should have 3 total reports (100@A, 100@B, 200@A)"
+    );
+    assert_eq!(
+        *ab_vessels, 2,
+        "cell A/B should have 2 distinct vessels (100 and 200)"
+    );
 
     let (c_reports, c_vessels) = results
         .get(&cell_c)
         .unwrap_or_else(|| panic!("expected cell {cell_c} (POS_C, Singapore Strait) in results"));
     assert_eq!(*c_reports, 1, "cell C should have exactly 1 report");
-    assert_eq!(*c_vessels, 1, "cell C should have exactly 1 distinct vessel");
+    assert_eq!(
+        *c_vessels, 1,
+        "cell C should have exactly 1 distinct vessel"
+    );
 }

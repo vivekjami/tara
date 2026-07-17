@@ -117,7 +117,7 @@ fn parse_timestamp_us(s: &str) -> Option<i64> {
 
 /// Days since 1970-01-01 for a given date. Standard civil calendar algorithm.
 fn days_from_civil(y: i32, m: u32, d: u32) -> Option<i64> {
-    if m < 1 || m > 12 || d < 1 || d > 31 {
+    if !(1..=12).contains(&m) || !(1..=31).contains(&d) {
         return None;
     }
     let y = if m <= 2 { y - 1 } else { y };

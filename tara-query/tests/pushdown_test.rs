@@ -5,13 +5,13 @@
 //! "the pushdown test confirms chunk pruning is actually reducing work,
 //! not just returning correct results the slow way."
 
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use datafusion::prelude::SessionContext;
 use serial_test::serial;
 
-use tara_query::provider::{VesselTableProvider, CHUNKS_READ};
+use tara_query::provider::{CHUNKS_READ, VesselTableProvider};
 use tara_store::index::ChunkIndex;
 
 mod common;
@@ -31,14 +31,21 @@ async fn narrow_time_range_query_prunes_chunks() {
     for i in 0..20 {
         let start = base + i * HOUR_US;
         let end = start + HOUR_US;
-        metas.push(write_synthetic_chunk(dir.path(), &format!("chunk_{i}.arrow"), 100 + i as u32, start, end));
+        metas.push(write_synthetic_chunk(
+            dir.path(),
+            &format!("chunk_{i}.arrow"),
+            100 + i as u32,
+            start,
+            end,
+        ));
     }
 
     let index = Arc::new(ChunkIndex::from_chunks(metas));
     let provider = Arc::new(VesselTableProvider::new(index));
 
     let ctx = SessionContext::new();
-    ctx.register_table("vessel_positions", provider).expect("register table");
+    ctx.register_table("vessel_positions", provider)
+        .expect("register table");
 
     // Query a range that overlaps exactly ONE of the 20 synthetic chunks.
     let target_start = base + 5 * HOUR_US;
@@ -56,7 +63,10 @@ async fn narrow_time_range_query_prunes_chunks() {
     let batches = df.collect().await.expect("execute query");
 
     let total_rows: usize = batches.iter().map(|b| b.num_rows()).sum();
-    assert_eq!(total_rows, 1, "expected exactly one matching row from the targeted chunk");
+    assert_eq!(
+        total_rows, 1,
+        "expected exactly one matching row from the targeted chunk"
+    );
 
     let chunks_opened = CHUNKS_READ.load(Ordering::SeqCst);
     assert!(
@@ -78,18 +88,32 @@ async fn unfiltered_query_reads_all_chunks() {
     let mut metas = Vec::new();
     for i in 0..5 {
         let start = base + i * HOUR_US;
-        metas.push(write_synthetic_chunk(dir.path(), &format!("chunk_{i}.arrow"), 100 + i as u32, start, start + HOUR_US));
+        metas.push(write_synthetic_chunk(
+            dir.path(),
+            &format!("chunk_{i}.arrow"),
+            100 + i as u32,
+            start,
+            start + HOUR_US,
+        ));
     }
 
     let index = Arc::new(ChunkIndex::from_chunks(metas));
     let provider = Arc::new(VesselTableProvider::new(index));
 
     let ctx = SessionContext::new();
-    ctx.register_table("vessel_positions", provider).expect("register table");
+    ctx.register_table("vessel_positions", provider)
+        .expect("register table");
 
     CHUNKS_READ.store(0, Ordering::SeqCst);
-    let df = ctx.sql("SELECT COUNT(*) FROM vessel_positions").await.expect("plan");
+    let df = ctx
+        .sql("SELECT COUNT(*) FROM vessel_positions")
+        .await
+        .expect("plan");
     df.collect().await.expect("execute");
 
-    assert_eq!(CHUNKS_READ.load(Ordering::SeqCst), 5, "unfiltered query should open every chunk");
+    assert_eq!(
+        CHUNKS_READ.load(Ordering::SeqCst),
+        5,
+        "unfiltered query should open every chunk"
+    );
 }

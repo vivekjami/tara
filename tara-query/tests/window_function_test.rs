@@ -30,14 +30,21 @@ async fn lag_window_function_over_custom_provider() {
     let mut metas = Vec::new();
     for i in 0..3 {
         let start = base + i * HOUR_US;
-        metas.push(write_synthetic_chunk(dir.path(), &format!("chunk_{i}.arrow"), mmsi, start, start + HOUR_US));
+        metas.push(write_synthetic_chunk(
+            dir.path(),
+            &format!("chunk_{i}.arrow"),
+            mmsi,
+            start,
+            start + HOUR_US,
+        ));
     }
 
     let index = Arc::new(ChunkIndex::from_chunks(metas));
     let provider = Arc::new(VesselTableProvider::new(index));
 
     let ctx = SessionContext::new();
-    ctx.register_table("vessel_positions", provider).expect("register table");
+    ctx.register_table("vessel_positions", provider)
+        .expect("register table");
 
     let sql = "
         SELECT

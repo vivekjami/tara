@@ -42,7 +42,7 @@ pub async fn ingest_file(input: &Path, output_dir: &Path) -> Result<()> {
         let record = result?;
         total_read += 1;
 
-        if total_read % 1_000_000 == 0 {
+        if total_read.is_multiple_of(1_000_000) {
             info!(
                 "Progress: {}M rows read, {}M written, {} chunks flushed",
                 total_read / 1_000_000,

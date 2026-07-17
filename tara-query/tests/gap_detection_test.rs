@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use datafusion::arrow::array::{AsArray};
+use datafusion::arrow::array::AsArray;
 use datafusion::arrow::datatypes::Int64Type;
 use datafusion::prelude::SessionContext;
 
@@ -62,7 +62,8 @@ async fn gap_detection_matches_hand_designed_sequences() {
     let provider = Arc::new(VesselTableProvider::new(index));
 
     let ctx = SessionContext::new();
-    ctx.register_table("vessel_positions", provider).expect("register table");
+    ctx.register_table("vessel_positions", provider)
+        .expect("register table");
 
     let sql = gap_detection_query(SIX_HOURS_US);
     let df = ctx.sql(&sql).await.expect("plan gap detection query");
@@ -75,14 +76,23 @@ async fn gap_detection_matches_hand_designed_sequences() {
     );
 
     // Locate the single result row and check its shape, not just its count.
-    let batch = batches.iter().find(|b| b.num_rows() > 0).expect("one non-empty batch");
+    let batch = batches
+        .iter()
+        .find(|b| b.num_rows() > 0)
+        .expect("one non-empty batch");
 
-    let mmsi_col = batch.column(0).as_primitive::<datafusion::arrow::datatypes::UInt32Type>();
+    let mmsi_col = batch
+        .column(0)
+        .as_primitive::<datafusion::arrow::datatypes::UInt32Type>();
     let gap_start_col = batch.column(1).as_primitive::<Int64Type>();
     let gap_end_col = batch.column(2).as_primitive::<Int64Type>();
     let gap_us_col = batch.column(3).as_primitive::<Int64Type>();
 
-    assert_eq!(mmsi_col.value(0), 100, "flagged gap should belong to mmsi 100");
+    assert_eq!(
+        mmsi_col.value(0),
+        100,
+        "flagged gap should belong to mmsi 100"
+    );
     assert_eq!(
         gap_start_col.value(0),
         base + 3 * FIVE_MIN_US,
@@ -93,5 +103,9 @@ async fn gap_detection_matches_hand_designed_sequences() {
         base + 3 * FIVE_MIN_US + 8 * ONE_HOUR_US,
         "gap_end_us should be the first report after the gap"
     );
-    assert_eq!(gap_us_col.value(0), 8 * ONE_HOUR_US, "gap_us should be exactly 8 hours");
+    assert_eq!(
+        gap_us_col.value(0),
+        8 * ONE_HOUR_US,
+        "gap_us should be exactly 8 hours"
+    );
 }

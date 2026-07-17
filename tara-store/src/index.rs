@@ -100,7 +100,6 @@ impl ChunkIndex {
     pub fn all_chunks(&self) -> Vec<&ChunkMeta> {
         self.chunks.iter().collect()
     }
-
 }
 
 /// Summary statistics returned by [`ChunkIndex::stats`].

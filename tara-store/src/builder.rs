@@ -59,7 +59,11 @@ pub fn build_index(chunks_root: &Path) -> Result<ChunkIndex> {
     info!(
         "Index built: {} chunks, {} dates",
         metas.len(),
-        metas.iter().map(|m| m.date.as_str()).collect::<HashSet<_>>().len()
+        metas
+            .iter()
+            .map(|m| m.date.as_str())
+            .collect::<HashSet<_>>()
+            .len()
     );
 
     Ok(ChunkIndex::from_chunks(metas))
@@ -69,8 +73,7 @@ pub fn build_index(chunks_root: &Path) -> Result<ChunkIndex> {
 /// Opens the file, scans every record batch, then closes it.
 /// Peak memory = one batch at a time (100k rows × ~92 bytes ≈ 9MB).
 fn build_chunk_meta(path: &Path, date: &str) -> Result<ChunkMeta> {
-    let file = std::fs::File::open(path)
-        .with_context(|| format!("Cannot open {:?}", path))?;
+    let file = std::fs::File::open(path).with_context(|| format!("Cannot open {:?}", path))?;
 
     let reader = FileReader::try_new(file, None)
         .with_context(|| format!("Not a valid Arrow IPC file: {:?}", path))?;
@@ -82,24 +85,27 @@ fn build_chunk_meta(path: &Path, date: &str) -> Result<ChunkMeta> {
     let mut row_count: u32 = 0;
 
     for batch_result in reader {
-        let batch = batch_result
-            .with_context(|| format!("Error reading batch from {:?}", path))?;
+        let batch = batch_result.with_context(|| format!("Error reading batch from {:?}", path))?;
 
         row_count += batch.num_rows() as u32;
 
         // ── Timestamp min/max ─────────────────────────────────────────────
         // Column index 1 = timestamp_us (see schema.rs for column order)
         let ts_col = batch
-    .column(1)
-    .as_any()
-    .downcast_ref::<TimestampMicrosecondArray>()
-    .with_context(|| "timestamp_us column is not TimestampMicrosecond — schema mismatch")?;
+            .column(1)
+            .as_any()
+            .downcast_ref::<TimestampMicrosecondArray>()
+            .with_context(|| "timestamp_us column is not TimestampMicrosecond — schema mismatch")?;
 
-for i in 0..ts_col.len() {
-    let val = ts_col.value(i);
-    if val < time_min { time_min = val; }
-    if val > time_max { time_max = val; }
-}
+        for i in 0..ts_col.len() {
+            let val = ts_col.value(i);
+            if val < time_min {
+                time_min = val;
+            }
+            if val > time_max {
+                time_max = val;
+            }
+        }
 
         // ── Distinct MMSIs ────────────────────────────────────────────────
         // Column index 0 = mmsi
@@ -141,8 +147,6 @@ for i in 0..ts_col.len() {
     if row_count == 0 {
         anyhow::bail!("Chunk file is empty");
     }
-
-    
 
     Ok(ChunkMeta {
         path: path.to_path_buf(),

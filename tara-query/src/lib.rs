@@ -22,6 +22,6 @@
 //! ```
 
 pub mod context;
+pub mod h3_udf;
 pub mod provider;
 pub mod queries;
-pub mod h3_udf;

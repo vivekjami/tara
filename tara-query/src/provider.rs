@@ -39,10 +39,10 @@ use datafusion::physical_plan::{
 };
 use datafusion::scalar::ScalarValue;
 use futures::stream;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tara_store::chunk::ChunkMeta;
 use tara_store::index::ChunkIndex;
 use tracing::info;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Test-only instrumentation: counts how many chunk files were actually opened.
 /// Reset with `CHUNKS_READ.store(0, Ordering::SeqCst)` before each test.
@@ -168,7 +168,7 @@ impl TableProvider for VesselTableProvider {
             chunks,
             self.schema.clone(),
             projection.cloned(),
-        )))
+        )?))
     }
 }
 
@@ -205,9 +205,15 @@ fn extract_time_bounds(filters: &[Expr]) -> (Option<i64>, Option<i64>) {
     let mut hi: Option<i64> = None;
 
     for expr in filters {
-        let Expr::BinaryExpr(bin) = expr else { continue };
-        let Expr::Column(col) = bin.left.as_ref() else { continue };
-        if col.name != "timestamp_us" { continue; }
+        let Expr::BinaryExpr(bin) = expr else {
+            continue;
+        };
+        let Expr::Column(col) = bin.left.as_ref() else {
+            continue;
+        };
+        if col.name != "timestamp_us" {
+            continue;
+        }
 
         let val: i64 = match bin.right.as_ref() {
             Expr::Literal(ScalarValue::TimestampMicrosecond(Some(v), _), _) => *v,
@@ -239,9 +245,21 @@ struct TaraExecutionPlan {
 }
 
 impl TaraExecutionPlan {
-    fn new(chunks: Vec<ChunkMeta>, schema: SchemaRef, projection: Option<Vec<usize>>) -> Self {
+    fn new(
+        chunks: Vec<ChunkMeta>,
+        schema: SchemaRef,
+        projection: Option<Vec<usize>>,
+    ) -> DFResult<Self> {
         let out_schema: SchemaRef = match &projection {
-            Some(idx) => Arc::new(schema.project(idx).unwrap()),
+            Some(idx) => match schema.project(idx) {
+                Ok(s) => Arc::new(s),
+                Err(e) => {
+                    return Err(DataFusionError::Execution(format!(
+                        "schema projection failed: {}",
+                        e
+                    )));
+                }
+            },
             None => schema.clone(),
         };
         let properties = Arc::new(PlanProperties::new(
@@ -250,12 +268,23 @@ impl TaraExecutionPlan {
             EmissionType::Final,
             Boundedness::Bounded,
         ));
-        Self { chunks, schema, projection, properties }
+        Ok(Self {
+            chunks,
+            schema,
+            projection,
+            properties,
+        })
     }
 
     fn output_schema(&self) -> SchemaRef {
         match &self.projection {
-            Some(idx) => Arc::new(self.schema.project(idx).unwrap()),
+            Some(idx) => match self.schema.project(idx) {
+                Ok(s) => Arc::new(s),
+                Err(e) => {
+                    tracing::error!("schema projection failed in output_schema: {}", e);
+                    self.schema.clone()
+                }
+            },
             None => self.schema.clone(),
         }
     }
@@ -270,11 +299,17 @@ impl DisplayAs for TaraExecutionPlan {
 impl ExecutionPlan for TaraExecutionPlan {
     // NOTE: no as_any — removed in DataFusion 54
 
-    fn name(&self) -> &str { "TaraExecutionPlan" }
+    fn name(&self) -> &str {
+        "TaraExecutionPlan"
+    }
 
-    fn properties(&self) -> &Arc<PlanProperties> { &self.properties }
+    fn properties(&self) -> &Arc<PlanProperties> {
+        &self.properties
+    }
 
-    fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> { vec![] }
+    fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
+        vec![]
+    }
 
     fn with_new_children(
         self: Arc<Self>,
@@ -290,7 +325,13 @@ impl ExecutionPlan for TaraExecutionPlan {
         let out_schema = self.output_schema();
 
         let iter = chunks.into_iter().flat_map(move |meta| {
-            read_chunk(&meta.path, projection.as_deref()).unwrap_or_default()
+            match read_chunk(&meta.path, projection.as_deref()) {
+                Ok(batches) => batches,
+                Err(e) => {
+                    tracing::error!("failed to read chunk {:?}: {}", meta.path, e);
+                    Vec::new()
+                }
+            }
         });
 
         Ok(Box::pin(RecordBatchStreamAdapter::new(
@@ -304,7 +345,10 @@ impl ExecutionPlan for TaraExecutionPlan {
 
 /// Open one Arrow IPC file, apply projection, return all batches.
 /// Returns empty Vec on any error — corrupt chunks are skipped silently.
-fn read_chunk(path: &std::path::Path, projection: Option<&[usize]>) -> anyhow::Result<Vec<RecordBatch>> {
+fn read_chunk(
+    path: &std::path::Path,
+    projection: Option<&[usize]>,
+) -> anyhow::Result<Vec<RecordBatch>> {
     CHUNKS_READ.fetch_add(1, Ordering::SeqCst);
     let reader = datafusion::arrow::ipc::reader::FileReader::try_new(
         File::open(path)?,

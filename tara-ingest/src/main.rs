@@ -235,6 +235,10 @@ mod tests {
 
     #[test]
     fn test_collect_day_dirs_sorts_chronologically() {
+        #[allow(clippy::useless_vec)]
+        // clippy suggests using an array literal here but the test intends to
+        // call `sort()` on a mutable collection; silence the lint to keep
+        // the test clear and stable.
         // Lexicographic order on YYYY-MM-DD is chronological order —
         // verify the sort produces the right sequence given known inputs.
         let mut dirs = vec![
