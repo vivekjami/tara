@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use anyhow::{Context, Result};
-use datafusion::execution::context::SessionContext;
 use datafusion::logical_expr::ScalarUDF;
 use tara_query::context::TaraContext;
 use tara_query::h3_udf::H3CellRes5;
@@ -12,6 +11,8 @@ use tara_store::index::ChunkIndex;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    tara_store::telemetry::init_telemetry("tara")?;
+
     let config = BenchmarkConfig::from_args()?;
     let index = ChunkIndex::load(&config.index_path)
         .with_context(|| format!("failed to load index at {:?}", config.index_path))?;
@@ -30,8 +31,7 @@ async fn main() -> Result<()> {
     let load_elapsed = load_started.elapsed();
     println!("context_load_ms={:.3}", load_elapsed.as_secs_f64() * 1000.0);
 
-    let session: &SessionContext = &ctx.session;
-    session.register_udf(ScalarUDF::from(H3CellRes5::new()));
+    ctx.session.register_udf(ScalarUDF::from(H3CellRes5::new()));
 
     let pushdown_query = pushdown_count_query(windows.pushdown_start_us, windows.pushdown_end_us);
     let gap_query = gap_detection_query_with_window(
@@ -44,7 +44,7 @@ async fn main() -> Result<()> {
     match config.benchmark {
         BenchmarkKind::All => {
             bench_query(
-                session,
+                &ctx,
                 "pushdown_count",
                 &pushdown_query,
                 config.warmup_runs,
@@ -52,7 +52,7 @@ async fn main() -> Result<()> {
             )
             .await?;
             bench_query(
-                session,
+                &ctx,
                 "gap_detection",
                 &gap_query,
                 config.warmup_runs,
@@ -60,7 +60,7 @@ async fn main() -> Result<()> {
             )
             .await?;
             bench_query(
-                session,
+                &ctx,
                 "density_query",
                 &density_sql,
                 config.warmup_runs,
@@ -70,7 +70,7 @@ async fn main() -> Result<()> {
         }
         BenchmarkKind::PushdownCount => {
             bench_query(
-                session,
+                &ctx,
                 "pushdown_count",
                 &pushdown_query,
                 config.warmup_runs,
@@ -80,7 +80,7 @@ async fn main() -> Result<()> {
         }
         BenchmarkKind::GapDetection => {
             bench_query(
-                session,
+                &ctx,
                 "gap_detection",
                 &gap_query,
                 config.warmup_runs,
@@ -90,7 +90,7 @@ async fn main() -> Result<()> {
         }
         BenchmarkKind::DensityQuery => {
             bench_query(
-                session,
+                &ctx,
                 "density_query",
                 &density_sql,
                 config.warmup_runs,
@@ -183,7 +183,7 @@ impl BenchmarkConfig {
 }
 
 async fn bench_query(
-    session: &SessionContext,
+    ctx: &TaraContext,
     name: &str,
     sql: &str,
     warmup_runs: usize,
@@ -192,8 +192,7 @@ async fn bench_query(
     println!("starting benchmark={}", name);
 
     for _ in 0..warmup_runs {
-        let df = session.sql(sql).await.context("planning failed")?;
-        let _ = df.collect().await.context("warmup execution failed")?;
+        let _ = ctx.query(sql).await.context("warmup execution failed")?;
     }
 
     let mut samples_ms = Vec::with_capacity(iterations);
@@ -201,8 +200,7 @@ async fn bench_query(
 
     for _ in 0..iterations {
         let started = Instant::now();
-        let df = session.sql(sql).await.context("planning failed")?;
-        let batches = df.collect().await.context("execution failed")?;
+        let batches = ctx.query(sql).await.context("execution failed")?;
         rows_returned = batches.iter().map(|batch| batch.num_rows()).sum();
         samples_ms.push(started.elapsed().as_secs_f64() * 1000.0);
     }

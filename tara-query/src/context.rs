@@ -29,6 +29,7 @@ impl TaraContext {
     }
 
     /// Execute a SQL query and return all result batches.
+    #[tracing::instrument(skip(self, sql))]
     pub async fn query(&self, sql: &str) -> Result<Vec<RecordBatch>> {
         let df = self
             .session

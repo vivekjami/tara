@@ -39,10 +39,10 @@ use datafusion::physical_plan::{
 };
 use datafusion::scalar::ScalarValue;
 use futures::stream;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use tara_store::chunk::ChunkMeta;
 use tara_store::index::ChunkIndex;
 use tracing::info;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Test-only instrumentation: counts how many chunk files were actually opened.
 /// Reset with `CHUNKS_READ.store(0, Ordering::SeqCst)` before each test.
@@ -138,6 +138,7 @@ impl TableProvider for VesselTableProvider {
     ///
     /// Called once during physical planning with only the filters we accepted
     /// as `Inexact`. Must not do file I/O — runs on the planning thread.
+    #[tracing::instrument(skip(self, _state, projection, filters, _limit), fields(chunks_scanned = tracing::field::Empty, chunks_total = tracing::field::Empty))]
     async fn scan(
         &self,
         _state: &dyn Session,
@@ -158,9 +159,13 @@ impl TableProvider for VesselTableProvider {
                 self.index.len(),
                 pruned.len()
             );
+            tracing::Span::current().record("chunks_total", self.index.len() as u64);
+            tracing::Span::current().record("chunks_scanned", pruned.len() as u64);
             pruned.into_iter().cloned().collect()
         } else {
             info!("no time filter: scanning all {} chunks", self.index.len());
+            tracing::Span::current().record("chunks_total", self.index.len() as u64);
+            tracing::Span::current().record("chunks_scanned", self.index.len() as u64);
             self.index.all_chunks().into_iter().cloned().collect()
         };
 
@@ -205,15 +210,9 @@ fn extract_time_bounds(filters: &[Expr]) -> (Option<i64>, Option<i64>) {
     let mut hi: Option<i64> = None;
 
     for expr in filters {
-        let Expr::BinaryExpr(bin) = expr else {
-            continue;
-        };
-        let Expr::Column(col) = bin.left.as_ref() else {
-            continue;
-        };
-        if col.name != "timestamp_us" {
-            continue;
-        }
+        let Expr::BinaryExpr(bin) = expr else { continue };
+        let Expr::Column(col) = bin.left.as_ref() else { continue };
+        if col.name != "timestamp_us" { continue; }
 
         let val: i64 = match bin.right.as_ref() {
             Expr::Literal(ScalarValue::TimestampMicrosecond(Some(v), _), _) => *v,
@@ -245,11 +244,7 @@ struct TaraExecutionPlan {
 }
 
 impl TaraExecutionPlan {
-    fn new(
-        chunks: Vec<ChunkMeta>,
-        schema: SchemaRef,
-        projection: Option<Vec<usize>>,
-    ) -> DFResult<Self> {
+    fn new(chunks: Vec<ChunkMeta>, schema: SchemaRef, projection: Option<Vec<usize>>) -> DFResult<Self> {
         let out_schema: SchemaRef = match &projection {
             Some(idx) => match schema.project(idx) {
                 Ok(s) => Arc::new(s),
@@ -268,12 +263,7 @@ impl TaraExecutionPlan {
             EmissionType::Final,
             Boundedness::Bounded,
         ));
-        Ok(Self {
-            chunks,
-            schema,
-            projection,
-            properties,
-        })
+        Ok(Self { chunks, schema, projection, properties })
     }
 
     fn output_schema(&self) -> SchemaRef {
@@ -299,17 +289,11 @@ impl DisplayAs for TaraExecutionPlan {
 impl ExecutionPlan for TaraExecutionPlan {
     // NOTE: no as_any — removed in DataFusion 54
 
-    fn name(&self) -> &str {
-        "TaraExecutionPlan"
-    }
+    fn name(&self) -> &str { "TaraExecutionPlan" }
 
-    fn properties(&self) -> &Arc<PlanProperties> {
-        &self.properties
-    }
+    fn properties(&self) -> &Arc<PlanProperties> { &self.properties }
 
-    fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
-        vec![]
-    }
+    fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> { vec![] }
 
     fn with_new_children(
         self: Arc<Self>,
@@ -319,10 +303,16 @@ impl ExecutionPlan for TaraExecutionPlan {
     }
 
     /// Stream Arrow batches from pruned chunk files, opened lazily.
-    fn execute(&self, _: usize, _: Arc<TaskContext>) -> DFResult<SendableRecordBatchStream> {
+    #[tracing::instrument(skip(self, partition, context), fields(chunks_scanned = tracing::field::Empty, chunks_total = tracing::field::Empty))]
+    fn execute(&self, partition: usize, context: Arc<TaskContext>) -> DFResult<SendableRecordBatchStream> {
         let chunks = self.chunks.clone();
         let projection = self.projection.clone();
         let out_schema = self.output_schema();
+
+        let _ = partition;
+        let _ = context;
+        tracing::Span::current().record("chunks_total", chunks.len() as u64);
+        tracing::Span::current().record("chunks_scanned", chunks.len() as u64);
 
         let iter = chunks.into_iter().flat_map(move |meta| {
             match read_chunk(&meta.path, projection.as_deref()) {
@@ -345,10 +335,7 @@ impl ExecutionPlan for TaraExecutionPlan {
 
 /// Open one Arrow IPC file, apply projection, return all batches.
 /// Returns empty Vec on any error — corrupt chunks are skipped silently.
-fn read_chunk(
-    path: &std::path::Path,
-    projection: Option<&[usize]>,
-) -> anyhow::Result<Vec<RecordBatch>> {
+fn read_chunk(path: &std::path::Path, projection: Option<&[usize]>) -> anyhow::Result<Vec<RecordBatch>> {
     CHUNKS_READ.fetch_add(1, Ordering::SeqCst);
     let reader = datafusion::arrow::ipc::reader::FileReader::try_new(
         File::open(path)?,

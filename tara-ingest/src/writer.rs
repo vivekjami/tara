@@ -11,6 +11,7 @@ use tracing::info;
 /// with time-based chunking; for Phase 1 the goal is just correct output.
 const BATCH_SIZE: usize = 100_000;
 
+#[tracing::instrument(skip(input, output_dir))]
 pub async fn ingest_file(input: &Path, output_dir: &Path) -> Result<()> {
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(false) // we handle the header manually
@@ -90,6 +91,7 @@ pub async fn ingest_file(input: &Path, output_dir: &Path) -> Result<()> {
     Ok(())
 }
 
+#[tracing::instrument(skip(rows, output_dir))]
 fn flush_chunk(rows: &[AisRow], output_dir: &Path, index: usize) -> Result<()> {
     let batch = rows_to_record_batch(rows)?;
     let path = output_dir.join(format!("chunk_{:06}.arrow", index));

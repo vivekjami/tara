@@ -12,6 +12,7 @@ pub mod builder;
 pub mod chunk;
 pub mod index;
 pub mod schema;
+pub mod telemetry;
 
 pub fn add(left: u64, right: u64) -> u64 {
     left + right

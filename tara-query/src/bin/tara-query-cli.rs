@@ -14,7 +14,7 @@ use tara_store::index::ChunkIndex;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
+    tara_store::telemetry::init_telemetry("tara")?;
 
     let args: Vec<String> = std::env::args().collect();
 

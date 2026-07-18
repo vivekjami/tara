@@ -40,6 +40,7 @@ const H3_RESOLUTION: Resolution = Resolution::Five;
 /// └── 2026-06-11/
 ///     └── ...
 /// ```
+#[tracing::instrument(skip(chunks_root))]
 pub fn build_index(chunks_root: &Path) -> Result<ChunkIndex> {
     let chunk_files = discover_chunks(chunks_root)?;
     info!("Building index over {} chunk files", chunk_files.len());
@@ -72,6 +73,7 @@ pub fn build_index(chunks_root: &Path) -> Result<ChunkIndex> {
 /// Compute `ChunkMeta` for a single Arrow IPC file.
 /// Opens the file, scans every record batch, then closes it.
 /// Peak memory = one batch at a time (100k rows × ~92 bytes ≈ 9MB).
+#[tracing::instrument(skip(path, date))]
 fn build_chunk_meta(path: &Path, date: &str) -> Result<ChunkMeta> {
     let file = std::fs::File::open(path).with_context(|| format!("Cannot open {:?}", path))?;
 
